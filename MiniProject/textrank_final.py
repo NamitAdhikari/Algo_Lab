@@ -17,13 +17,6 @@ class TextRank4Keyword():
         self.steps = 20 # iteration steps
         self.node_weight = None # save keywords and its weight
 
-
-    def set_stopwords(self, stopwords):
-        """Set stop words"""
-        for word in STOP_WORDS.union(set(stopwords)):
-            lexeme = nlp.vocab[word]
-            lexeme.is_stop = True
-
     def sentence_segment(self, str, candidate_pos):
         """Store those words only in candidate_pos"""
         tokens = nltk.word_tokenize(str)
@@ -102,9 +95,7 @@ class TextRank4Keyword():
                     res2.append(res1[i])
 
             i += 1
-
         return res2
-
 
     def get_vocab(self, sentences):
         """Get all tokens"""
@@ -163,11 +154,8 @@ class TextRank4Keyword():
         print(keywords)
 
 
-    def analyze(self, text, candidate_pos, window_size=4, stopwords=list()):
+    def analyze(self, text, candidate_pos, window_size=4):
         """Main function to analyze text"""
-
-        # Set stop words
-        self.set_stopwords(stopwords)
 
         # Filter sentences
         sentences = self.sentence_segment(text, candidate_pos)
