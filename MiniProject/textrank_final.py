@@ -3,69 +3,73 @@ import numpy as np
 import spacy
 from spacy.lang.en.stop_words import STOP_WORDS
 import inflect
-import nltk
 
 nlp = spacy.load("en_core_web_sm")
 plu = inflect.engine()
 
-class TextRank4Keyword():
+class TextRankKeyword():
     """Extract keywords from text"""
 
     def __init__(self):
         self.d = 0.85 # damping coefficient, usually is .85
-        self.min_diff = 1e-5 # convergence threshold
-        self.steps = 20 # iteration steps
-        self.node_weight = None # save keywords and its weight
+        self.min_dif = 1e-5 # convergence threshold
+        self.step = 20 # iteration steps
+        self.nodes_weight = None # save keywords and its weight
 
-    def sentence_segment(self, str, candidate_pos):
+    def _stopwords(self):
+        """Set stop words"""
+        for word in STOP_WORDS:
+            lexeme = nlp.vocab[word]
+            lexeme.is_stop = True
+
+    def sentence_segment(self, doc, candidate_pos):
         """Store those words only in candidate_pos"""
-        tokens = nltk.word_tokenize(str)
-
-        allSents = []
-        for sent in tokens:
-            allSents.append(sent)
 
         keywordSent = []
-        i = 0
-        pos = nltk.pos_tag(allSents)
 
-        while (True):
-            sent = ""
-            while (pos[i][1] in candidate_pos):
-                sent += f"{allSents[i]} "
-                i += 1
+        # Segment sentences according to stopwords and candidate_pos
+        for sent in doc.sents:
+            i = 0
+            while (True):
+                sents = ""
+                while (sent[i].pos_ in candidate_pos and sent[i].is_stop is False):
+                    sents += f'{sent[i].text} '
+                    i += 1
 
-            if pos[i][1] not in candidate_pos:
-                i += 1
-            if sent != "":
-                keywordSent.append(sent.strip())
-            if i >= len(allSents):
-                break
+                if sent[i].pos_ not in candidate_pos or sent[i].is_stop is True:
+                    i += 1
 
+                if sents != "":
+                    keywordSent.append(sents.strip())
+
+                if i >= len(sent):
+                    break
+
+        # Remove the redundant words by checking uppercase and lowercase
         res1 = []
 
         for i in keywordSent:
             if i not in res1:
                 res1.append(i)
 
+
         out = map(lambda x:x.lower(), res1)
         res2 = list(out)
 
-        res3 = []
-
-        for i in res2:
-            if i in res3:
-                res3.append(False)
-            else:
-                res3.append(i)
-
         i = 0
-        while (i < len(res3)):
-            if res3[i] == False:
-                res3.pop(i)
-                res1.pop(i)
+        while i < len(res1):
+            j = i + 1
+            l = len(res1)
+            while j < l:
+                if res1[i].lower() in res2[j:] and res1[j].islower() is False:
+                    indx = res2[j:].index(res1[i].lower())
+                    res1.pop(j + indx)
+                    res2.pop(j + indx)
+                    l -= 1
+                j +=1
             i += 1
 
+        # Remove redundant words by checking singular and plural
         res2 = []
 
         l = len(res1)
@@ -119,81 +123,91 @@ class TextRank4Keyword():
                     token_pairs.append(pair)
         return token_pairs
 
-    def symmetrize(self, g):
-        return g + g.T - np.diag(g.diagonal())
+    def symmetricize(self, mat):
+        return mat + mat.T - np.diag(mat.diagonal())
 
     def get_matrix(self, vocab, token_pairs):
         """Get normalized matrix"""
 
         # Build matrix
         vocab_size = len(vocab)
-        g = np.zeros((vocab_size, vocab_size), dtype='float')
+        mat = np.zeros((vocab_size, vocab_size), dtype='float')
         for word_1, word_2 in token_pairs:
             i, j = vocab[word_1], vocab[word_2]
-            g[i][j] = 1
+            mat[i][j] = 1
 
-        # Get Symmeric matrix
-        g = self.symmetrize(g)
+        # Get Symmetric matrix
+        mat = self.symmetricize(mat)
 
         # Normalize matrix by column
-        normal = np.sum(g, axis=0)
-        g_norm = np.divide(g, normal, where=normal!=0) # ignore the 0 element in normal
+        normal = np.sum(mat, axis=0)
+        mat_norm = np.divide(mat, normal, where=normal!=0) # ignore the 0 element in normal
 
-        return g_norm
+        return mat_norm
 
 
     def get_keywords(self, number):
         """Print top number keywords"""
-        keywords = list()
-        node_weight = OrderedDict(sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True))
-        for i, (key, value) in enumerate(node_weight.items()):
-            # print(key + ' - ' + str(value))
-            keywords.append(key)
-            if i >= number:
+        keywords = set()
+        nodes_weight = OrderedDict(sorted(self.nodes_weight.items(), key=lambda t: t[1], reverse=True))
+        for index, (key, value) in enumerate(nodes_weight.items()):
+            print(key + ' - ' + str(value))
+            keywords.add(key)
+            if index >= number:
                 break
-        print(keywords)
+        print(f'\n{keywords}')
 
 
     def analyze(self, text, candidate_pos, window_size=4):
         """Main function to analyze text"""
 
-        # Filter sentences
-        sentences = self.sentence_segment(text, candidate_pos)
+        # Set stop words
+        self._stopwords()
 
-        # Build vocabulary
+        # Parse input text
+        doc = nlp(text)
+
+        # Filter sentences
+        sentences = self.sentence_segment(doc, candidate_pos)
+
+        # Build vocab
         vocab = self.get_vocab(sentences)
 
         # Get token_pairs from windows
         token_pairs = self.get_token_pairs(window_size, sentences)
 
         # Get normalized matrix
-        g = self.get_matrix(vocab, token_pairs)
+        mat = self.get_matrix(vocab, token_pairs)
 
         # Initialization for weight (PageRank value)
-        pr = np.array([1] * len(vocab))
+        pageR = np.array([1] * len(vocab))
 
         # Iteration for weight
-        previous_pr = 0
-        for epoch in range(self.steps):
-            pr = (1 - self.d) + self.d * np.dot(g, pr)
-            if abs(previous_pr - sum(pr))  < self.min_diff:
+        previous_pageR = 0
+        for epoch in range(self.step):
+            pageR = (1 - self.d) + self.d * np.dot(mat, pageR)
+            if abs(previous_pageR - sum(pageR))  < self.min_dif:
                 break
             else:
-                previous_pr = sum(pr)
+                previous_pageR = sum(pageR)
 
-        # Get weight for each node
-        node_weight = dict()
+        # Get weights for each node
+        nodes_weight = dict()
         for word, index in vocab.items():
-            node_weight[word] = pr[index]
+            nodes_weight[word] = pageR[index]
 
-        self.node_weight = node_weight
+        self.nodes_weight = nodes_weight
 
 
 if __name__ == "__main__":
-    content = '''
-    Compatibility of systems of linear constraints over the set of natural numbers. Criteria of compatibility of a system of linear Diophantine equations, strict inequations, and nonstrict inequations are considered. Upper bounds for components of a minimal set of solutions and algorithms of construction of minimal generating sets of solutions for all types of systems are given. These criteria and the corresponding algorithms for constructing a minimal supporting set of solutions can be used in solving all the considered types systems and systems of mixed types.
+
+    text = '''
+    The Wandering Earth, described as Chinas first big-budget science fiction thriller, quietly made it onto screens at AMC theaters in North America this weekend, and it shows a new side of Chinese filmmaking — one focused toward futuristic spectacles rather than China’s traditionally grand, massive historical epics. At the same time, The Wandering Earth feels like a throwback to a few familiar eras of American filmmaking. While the film’s cast, setting, and tone are all Chinese, longtime science
     '''
 
-    textrank = TextRank4Keyword()
-    textrank.analyze(content, candidate_pos = ['NN', 'NNS', 'JJ', 'NNP'])
+    textrank = TextRankKeyword()
+
+    # NOUN and PROPER NOUN (PROPN) only selected while segmenting sentences
+    textrank.analyze(text, candidate_pos = ['NOUN', 'PROPN'])
+
     textrank.get_keywords(10)

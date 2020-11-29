@@ -1,12 +1,15 @@
+from collections import defaultdict
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 
 class GraphAnalyze():
 
     def readCsvToEdgelist(self, url, header_list=["a", "b"]):
         E = pd.read_csv(url, sep=" ", header=None, names=header_list)
-        G = nx.from_pandas_edgelist(E, "a", "b", ["w"])
+        G = nx.from_pandas_edgelist(E, "a", "b")
         return G
 
     def findNodeEdge(self, G, nFlag = False, eFlag = False):
@@ -35,21 +38,15 @@ class GraphAnalyze():
         return density
 
     def findDiameter(self, G):
-        pass
-        # nodes = nx.nodes(G)
-        # pairs = [(nodes[i], nodes[j]) for i in range(len(nodes)) for j in range (i+1, len(nodes)-1)]
-        # smallest_paths = []
-        #
-        # for (s, e) in pairs:
-        #     paths = []
-        #
-        #
-        #     smallest = sorted(paths, key=len)
-        #     smallest_paths.append(smallest)
-        #
-        # smallest_paths.sort(key=len)
-        # diameter = len(smallest_paths[-1])
-        # return diameter
+
+        max_length = 0
+
+        for i in G.nodes:
+            for j in G.nodes:
+
+                max_length = max(max_length, nx.dijkstra_path_length(G, i, j))
+
+        return max_length
 
 
     def findAvgClusteringCoeff(self, nodes, edges):
@@ -84,6 +81,7 @@ class GraphAnalyze():
     def printEverything(self, G):
         nodes, edges = self.findNodeEdge(G)
         n, e = len(nodes), len(edges)
+        
         print(f"Number of nodes in graph : {n}")
         print(f"Number of edges in graph : {e}")
 
@@ -91,13 +89,42 @@ class GraphAnalyze():
 
         print(f"Density of graph : {self.findDensity(n, e)}")
 
-        print(f"Diameter of graph : {nx.diameter(G)}")
+        # print(f"Diameter of graph : {nx.diameter(G)}")
 
-        print(f"Average Clustering of graph : {self.findAvgClusteringCoeff(nodes, edges)}")
+        # print(f"Average Clustering of graph : {self.findAvgClusteringCoeff(nodes, edges)}")
+
+    def degree_distribution(self, G):
+        deg = defaultdict(int)
+        nodes = self.findNodeEdge(G, nFlag=1)
+        n = len(nodes)
+
+        for v in nodes:
+            deg[G.degree(v)] += 1
+
+        for key, val in deg.items():
+            deg[key] = val / n
+        
+        return deg
 
 
 if __name__ == "__main__":
 
     graph = GraphAnalyze()
-    G = graph.readCsvToEdgelist('data/aves-sparrowlyon-flock-season2.edges', ["a", "b", "w"])
+    G = graph.readCsvToEdgelist('data/web-spam.mtx', ["a", "b"])
     graph.printEverything(G)
+
+    nx.draw(G, with_labels=True)
+    
+    plt.show()
+
+
+    p = graph.degree_distribution(G)
+
+    keys = p.keys()
+    values = p.values()
+
+    plt.bar(keys, values, color=np.random.rand(len(keys), 3))
+    plt.xticks(range(max(keys)+1), list(keys).sort())
+    plt.xlabel("Degree")
+    plt.ylabel("Degree Distribution")
+    plt.show()
