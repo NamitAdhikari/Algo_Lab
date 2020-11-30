@@ -89,9 +89,9 @@ class GraphAnalyze():
 
         print(f"Density of graph : {self.findDensity(n, e)}")
 
-        # print(f"Diameter of graph : {nx.diameter(G)}")
+        print(f"Diameter of graph : {self.findDiameter(G)}")
 
-        # print(f"Average Clustering of graph : {self.findAvgClusteringCoeff(nodes, edges)}")
+        print(f"Average Clustering of graph : {self.findAvgClusteringCoeff(nodes, edges)}")
 
     def degree_distribution(self, G):
         deg = defaultdict(int)
